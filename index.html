@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Tesouraria Executiva – CERC</title>
+  <!-- SEO meta -->
+  <meta name="description" content="Dashboard interativo para visualização da tesouraria executiva da CERC usando dados CSV." />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Custom Tailwind config for dark mode and colors -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: '#0f1117',
+            surface: '#1a1d27',
+            surface2: '#22263a',
+            accentBlue: '#3b82f6',
+            accentGreen: '#10b981',
+            accentOrange: '#f59e0b',
+            accentRed: '#ef4444',
+            textPrimary: '#f1f5f9',
+            textMuted: '#64748b',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <!-- External CSS -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-background text-textPrimary font-sans min-h-screen flex flex-col items-center p-4 md:p-6 lg:p-8">
+  <!-- URL Modal (glassmorphic) -->
+  <div id="url-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" style="display:none;">
+    <div class="modal-box bg-surface2/90 backdrop-blur-lg rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 border border-white/10">
+      <h2 class="text-xl font-semibold mb-3 text-textPrimary">Conectar ao CSV</h2>
+      <p class="mb-4 text-sm text-textMuted leading-relaxed">Cole a URL pública do CSV contendo os dados da tesouraria.</p>
+      <input type="url" id="csv-url-input" class="w-full p-3 rounded-lg border border-white/10 bg-surface text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60 transition" placeholder="https://.../dados.csv" />
+      <div class="flex justify-end gap-3 mt-5">
+        <button id="cancel-btn" class="text-sm text-textMuted hover:text-textPrimary font-medium py-2 px-4 rounded-lg transition">Cancelar</button>
+        <button id="connect-btn" class="bg-accentBlue hover:bg-blue-500 text-white text-sm font-medium py-2 px-5 rounded-lg transition shadow-lg shadow-accentBlue/20">Conectar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="w-full max-w-7xl flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-bold text-textPrimary tracking-tight">Dashboard Tesouraria Executiva</h1>
+      <p class="text-sm text-textMuted mt-1">CERC S.A. · Visão consolidada do portfólio</p>
+    </div>
+    <button id="reset-url" class="text-textMuted hover:text-textPrimary transition p-2 rounded-lg hover:bg-surface2" title="Redefinir URL do CSV">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </button>
+  </header>
+
+  <!-- Main app container (hidden until data loaded) -->
+  <main id="app" class="hidden w-full max-w-7xl space-y-6">
+
+    <!-- KPI Strip -->
+    <section id="kpi-strip" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
+
+    <!-- Charts Row: Aging + Donuts side by side -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Aging chart takes 2/3 -->
+      <div id="aging-chart" class="chart-card lg:col-span-2">
+        <h3 class="chart-title">Distribuição de Vencimentos</h3>
+        <div class="chart-wrap"><canvas id="aging-canvas"></canvas></div>
+      </div>
+      <!-- Donuts stacked in 1/3 -->
+      <div class="flex flex-col gap-4">
+        <div id="donut-contraparte" class="chart-card">
+          <h3 class="chart-title">Exposição por Contraparte</h3>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-contraparte-canvas"></canvas></div>
+        </div>
+        <div id="donut-produto" class="chart-card">
+          <h3 class="chart-title">Exposição por Produto</h3>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-produto-canvas"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Second Row: Alerts + LTM -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Maturity Alerts -->
+      <div id="maturity-alerts" class="chart-card lg:col-span-1">
+        <h3 class="chart-title">Alertas de Vencimento</h3>
+        <ul id="alerts-list" class="space-y-2 mt-2 max-h-72 overflow-y-auto pr-1"></ul>
+      </div>
+      <!-- LTM Line Chart -->
+      <div id="ltm-chart" class="chart-card lg:col-span-2">
+        <h3 class="chart-title">Rentabilidade vs CDI (LTM)</h3>
+        <div class="chart-wrap"><canvas id="ltm-canvas"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Active filter banner (hidden by default) -->
+    <div id="filter-banner" class="hidden items-center gap-3 px-4 py-2 rounded-lg bg-accentBlue/10 border border-accentBlue/20 text-sm text-accentBlue">
+      <span id="filter-text"></span>
+      <button id="clear-filter" class="ml-auto text-xs font-semibold hover:text-white transition">✕ Limpar filtro</button>
+    </div>
+
+    <!-- Drill-down Table -->
+    <section id="drill-table" class="chart-card overflow-hidden">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+        <h3 class="chart-title mb-0">Detalhamento de Ativos</h3>
+        <div class="flex items-center gap-3">
+          <input type="text" id="search-input" class="p-2 px-3 rounded-lg border border-white/10 bg-surface text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60 transition w-56" placeholder="Buscar..." />
+          <button id="export-csv" class="bg-accentGreen/15 text-accentGreen hover:bg-accentGreen hover:text-white text-sm font-medium py-2 px-4 rounded-lg transition whitespace-nowrap">Exportar CSV</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-lg">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr id="table-header"></tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- External JS -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

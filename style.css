@@ -1,0 +1,202 @@
+/* style.css */
+/* ─── Design System Tokens ─── */
+:root {
+  --color-background: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-2: #22263a;
+  --color-accent-blue: #3b82f6;
+  --color-accent-green: #10b981;
+  --color-accent-orange: #f59e0b;
+  --color-accent-red: #ef4444;
+  --color-text-primary: #f1f5f9;
+  --color-text-muted: #64748b;
+  --radius: 0.875rem;
+}
+
+/* ─── Global Resets ─── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Glassmorphism ─── */
+.glass {
+  background: rgba(34, 38, 58, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+}
+
+/* ─── Shared Card Component ─── */
+.chart-card {
+  background: var(--color-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.chart-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+/* ─── Chart Canvas Wrappers ─── */
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 280px;        /* consistent fixed height */
+}
+.chart-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.chart-wrap--donut {
+  height: 200px;        /* smaller for donuts stacked vertically */
+}
+
+/* ─── KPI Cards ─── */
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.125rem 1.25rem;
+  border-radius: var(--radius);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.kpi-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kpi-value {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin-top: 0.375rem;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.kpi-extra {
+  font-size: 0.6875rem;
+  color: var(--color-accent-orange);
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+.kpi-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* ─── Maturity Alert Pills ─── */
+.alert-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  line-height: 1.4;
+}
+.alert-pill--red   { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
+.alert-pill--amber { background: rgba(245, 158, 11, 0.12); color: #fcd34d; }
+.alert-pill--green { background: rgba(16, 185, 129, 0.10); color: #6ee7b7; }
+
+/* ─── Table Styling ─── */
+#drill-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+#drill-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface);
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+#drill-table th:hover {
+  color: var(--color-text-primary);
+}
+#drill-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+#drill-table tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.15s;
+}
+#drill-table tbody tr:nth-child(even) {
+  background: rgba(34, 38, 58, 0.35);
+}
+#drill-table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* ─── Count-up Animation ─── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.counted {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+/* ─── Responsive tweaks ─── */
+@media (max-width: 640px) {
+  .kpi-value { font-size: 1.125rem; }
+  .chart-wrap { height: 220px; }
+  .chart-wrap--donut { height: 180px; }
+}
