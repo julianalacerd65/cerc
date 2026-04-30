@@ -74,7 +74,6 @@ function loadCsv(url) {
   setStatus('Carregando CSV...');
   Papa.parse(url, {
     download: true,
-    delimiter: ';',
     header: true,
     dynamicTyping: false,
     skipEmptyLines: true,
