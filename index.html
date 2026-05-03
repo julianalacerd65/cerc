@@ -68,48 +68,82 @@
   <!-- Main app container (hidden until data loaded) -->
   <main id="app" class="hidden w-full max-w-7xl space-y-6">
 
-    <!-- KPI Strip -->
-    <section id="kpi-strip" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
-
-    <!-- Charts Row: Aging + Donuts side by side -->
-    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <!-- Aging chart takes 2/3 -->
-      <div id="aging-chart" class="chart-card lg:col-span-2">
-        <h3 class="chart-title">Distribuição de Vencimentos</h3>
-        <div class="chart-wrap"><canvas id="aging-canvas"></canvas></div>
+    <!-- Filters (Top bar) -->
+    <section id="filter-bar" class="chart-card flex flex-wrap gap-4 items-end">
+      <div class="flex-1 min-w-[150px]">
+        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Mês Base</label>
+        <select id="filter-mes" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
+          <option value="">Mais recente</option>
+        </select>
       </div>
-      <!-- Donuts stacked in 1/3 -->
-      <div class="flex flex-col gap-4">
-        <div id="donut-contraparte" class="chart-card">
-          <h3 class="chart-title">Exposição por Contraparte</h3>
-          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-contraparte-canvas"></canvas></div>
-        </div>
-        <div id="donut-produto" class="chart-card">
-          <h3 class="chart-title">Exposição por Produto</h3>
-          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-produto-canvas"></canvas></div>
-        </div>
+      <div class="flex-1 min-w-[150px]">
+        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Emissor</label>
+        <select id="filter-emissor" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
+          <option value="Todas">Todos</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[150px]">
+        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Produto</label>
+        <select id="filter-produto" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
+          <option value="Todos">Todos</option>
+        </select>
+      </div>
+      <div>
+        <button id="clear-filter-btn" class="bg-accentRed/10 text-accentRed hover:bg-accentRed hover:text-white text-sm font-medium py-2 px-4 rounded-lg transition whitespace-nowrap border border-accentRed/20">Limpar Filtros</button>
       </div>
     </section>
 
-    <!-- Second Row: Alerts + LTM -->
+    <!-- KPI Strip -->
+    <section id="kpi-strip" class="grid grid-cols-2 lg:grid-cols-5 gap-4"></section>
+
+    <!-- Charts Row 1: Bar Chart | Bar Chart | Alert Box -->
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- BarChart 1 (Liquidez) -->
+      <div id="aging-chart" class="chart-card">
+        <h3 class="chart-title">Liquidez ao Longo do Tempo</h3>
+        <div class="chart-wrap"><canvas id="aging-canvas"></canvas></div>
+      </div>
+      <!-- BarChart 2 (Fluxo Vencimento) -->
+      <div id="fluxo-chart" class="chart-card">
+        <h3 class="chart-title">Fluxo de Vencimento</h3>
+        <div class="chart-wrap"><canvas id="fluxo-canvas"></canvas></div>
+      </div>
       <!-- Maturity Alerts -->
-      <div id="maturity-alerts" class="chart-card lg:col-span-1">
-        <h3 class="chart-title">Alertas de Vencimento</h3>
+      <div id="maturity-alerts" class="chart-card">
+        <h3 class="chart-title">Alertas Vencimentos 60d</h3>
         <ul id="alerts-list" class="space-y-2 mt-2 max-h-72 overflow-y-auto pr-1"></ul>
       </div>
-      <!-- LTM Line Chart -->
-      <div id="ltm-chart" class="chart-card lg:col-span-2">
+    </section>
+
+    <!-- Charts Row 2: 3 Donuts -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div id="donut-emissor" class="chart-card">
+        <h3 class="chart-title">Exposição por Emissor</h3>
+        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-emissor-canvas"></canvas></div>
+      </div>
+      <div id="donut-produto" class="chart-card">
+        <h3 class="chart-title">Distribuição por Produto</h3>
+        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-produto-canvas"></canvas></div>
+      </div>
+      <div id="donut-rating" class="chart-card">
+        <h3 class="chart-title">Distribuição por Rating</h3>
+        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-rating-canvas"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Redemption Simulation (Placeholder) -->
+    <section id="redemption-simulation" class="chart-card hidden">
+      <h3 class="chart-title">Simulador de Resgate</h3>
+      <div id="simulation-content"></div>
+    </section>
+
+    <!-- LTM Line Chart -->
+    <section class="grid grid-cols-1 gap-4">
+      <div id="ltm-chart" class="chart-card">
         <h3 class="chart-title">Rentabilidade vs CDI (LTM)</h3>
         <div class="chart-wrap"><canvas id="ltm-canvas"></canvas></div>
       </div>
     </section>
-
-    <!-- Active filter banner (hidden by default) -->
-    <div id="filter-banner" class="hidden items-center gap-3 px-4 py-2 rounded-lg bg-accentBlue/10 border border-accentBlue/20 text-sm text-accentBlue">
-      <span id="filter-text"></span>
-      <button id="clear-filter" class="ml-auto text-xs font-semibold hover:text-white transition">✕ Limpar filtro</button>
-    </div>
 
     <!-- Drill-down Table -->
     <section id="drill-table" class="chart-card overflow-hidden">
