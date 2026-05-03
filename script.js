@@ -35,22 +35,55 @@ function buildId(row, idx) {
   return `id_${Math.abs(hash)}`;
 }
 
+// -------------------- Tabela IOF (regressiva em dias) --------------------
+const IOF_TABLE = {
+  1:96,2:93,3:90,4:86,5:83,6:80,7:76,8:73,9:70,10:66,
+  11:63,12:60,13:56,14:53,15:50,16:46,17:43,18:40,19:36,
+  20:33,21:30,22:26,23:23,24:20,25:16,26:13,27:10,28:6,29:3
+};
+// Faixas de IRRF (dias mínimos para cada alíquota)
+const IRRF_BRACKETS = [180, 360, 720, Infinity]; // 22.5%, 20%, 17.5%, 15%
+const IRRF_RATES    = [22.5, 20, 17.5, 15];
+
+function calcDiasParaIrrfMenor(diasDecorridos) {
+  // Retorna quantos dias faltam para cair na próxima faixa menor de IRRF
+  for (let i = 0; i < IRRF_BRACKETS.length - 1; i++) {
+    if (diasDecorridos < IRRF_BRACKETS[i]) {
+      return IRRF_BRACKETS[i] - diasDecorridos;
+    }
+  }
+  return 0; // já está na alíquota mínima (15%)
+}
+
+function calcClassificacaoLiquidez(dataCarencia, tipoGarantia) {
+  const hoje = new Date();
+  if (tipoGarantia && tipoGarantia !== 'Livre') return 'Bloqueado';
+  if (!dataCarencia) return 'Livre Hoje';
+  const diffMs = dataCarencia - hoje;
+  const dias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (dias <= 0)  return 'Livre Hoje';
+  if (dias <= 30) return 'Até 30 dias';
+  if (dias <= 180) return '30-180 dias';
+  return 'Acima 180 dias';
+}
+
 // -------------------- Estado global --------------------
 const state = {
-  allRows: [], // todas as linhas sanitizadas
-  filtered: [], // após filtros
-  latestDate: null,
-  latestRows: [], // snapshot com data_base = latestDate
-  kpi: {},
-  agingBuckets: {},
-  byContraparte: {},
-  byProduto: {},
-  ltmSeries: [],
-  // filtros selecionados (valores das dropdowns)
-  filtroDataBase: null,
-  filtroEmissora: "Todas",
-  filtroProduto: "Todos",
-  searchTerm: "",
+  allRows:    [],   // todas as linhas sanitizadas (todos os meses)
+  latestDate: null, // data_base mais recente disponível
+  latestRows: [],   // snapshot: apenas linhas do mês selecionado
+  kpi:        {},
+  liquidezBuckets: {},
+  vencimentoBuckets: {},
+  byEmissor:  {},
+  byProduto:  {},
+  byRating:   {},
+  ltmSeries:  [],
+  // filtros
+  filtroDataBase:  null,   // Date | null → null = mais recente
+  filtroEmissores: [],     // [] = todos
+  filtroProdutos:  [],     // [] = todos
+  searchTerm: '',
 };
 
 // -------------------- UI Helpers --------------------
@@ -93,39 +126,72 @@ function loadCsv(url) {
 
 // -------------------- Processamento e cálculo --------------------
 function processRows(rawRows) {
-  // Sanitiza cada linha
+  const hoje = new Date();
+
   state.allRows = rawRows.map((r, idx) => {
+    // --- Datas ---
+    const data_base      = sanitiseDate(r['data_base']);
+    const data_inicial   = sanitiseDate(r['data_inicial']);
+    const data_vencimento = sanitiseDate(r['data_vencimento']);
+    const data_carencia  = sanitiseDate(r['data_carencia']);
+
+    // --- Tipo de garantia (trim necessário pois campo tem espaço no CSV) ---
+    const tipo_garantia = (r['tipo_garantia'] || '').trim();
+
+    // --- Campos financeiros ---
+    const saldo_bruto_atual    = sanitiseMoney(r['saldo_bruto_atual']);
+    const saldo_liquido_atual  = sanitiseMoney(r['saldo_liquido_atual']);
+    const taxa_cdi_contratada  = sanitisePct(r['taxa_cdi_contratada']);   // ex: 96% → 0.96
+    const taxa_cdi_mensal      = sanitisePct(r['taxa_cdi_mensal']);       // ex: 0,97% → 0.0097
+    const rentabilidade_mensal = sanitiseMoney(r['rentabilidade_mensal']); // valor em R$
+
+    // --- Campos derivados calculados no frontend ---
+    const diasDecorridos = data_inicial
+      ? Math.floor((hoje - data_inicial) / (1000 * 60 * 60 * 24))
+      : 0;
+    const dias_carencia_restante = data_carencia
+      ? Math.max(0, Math.ceil((data_carencia - hoje) / (1000 * 60 * 60 * 24)))
+      : 0;
+    const classificacao_liquidez = calcClassificacaoLiquidez(data_carencia, tipo_garantia);
+    const dias_para_irrf_menor   = calcDiasParaIrrfMenor(diasDecorridos);
+
+    // Label do mês para agrupamento LTM (ex: "2024-01")
+    const mes_label = data_base
+      ? `${data_base.getFullYear()}-${String(data_base.getMonth() + 1).padStart(2, '0')}`
+      : '';
+
     return {
-      id: buildId(r, idx),
-      data_base: sanitiseDate(r.data_base),
-      mes: r.mes?.trim() || "",
-      empresa: r.empresa?.trim() || "",
-      no_operacao: r.no_operacao?.trim() || "",
-      banco: r.banco?.trim() || "",
-      contraparte: r.contraparte?.trim() || "",
-      produto: r.produto?.trim() || "",
-      rating: r.rating?.trim() || "",
-      indexador: r.indexador?.trim() || "",
-      garantia: r.garantia?.replace(/\"/g, "").trim() || "",
-      cdi_contratado: sanitisePct(r.cdi_contratado),
-      data_aplicacao: sanitiseDate(r.data_aplicacao),
-      data_vencimento: sanitiseDate(r.data_vencimento),
-      data_carencia: sanitiseDate(r.data_carencia),
-      aplicacao_inicial: sanitiseMoney(r.aplicacao_inicial),
-      aplicacoes: sanitiseMoney(r.aplicacoes),
-      resgates_liquidos: sanitiseMoney(r.resgates_liquidos),
-      rendimento_bruto: sanitiseMoney(r.rendimento_bruto),
-      irrf_previsto: sanitiseMoney(r.irrf_previsto),
-      saldo_liquido_atual: sanitiseMoney(r.saldo_liquido_atual),
-      cdi_mes: sanitisePct(r.cdi_mes),
-      rentabilidade_esperada: sanitiseMoney(r.rentabilidade_esperada),
-      benchmark_100_cdi: sanitiseMoney(r.benchmark_100_cdi),
-      perf_vs_benchmark: sanitisePct(r.perf_vs_benchmark),
-      alerta_benchmark: r.alerta_benchmark?.trim() || "",
-      prazo_restante: parseInt(r.prazo_restante) || 0,
-      dias_corridos: parseInt(r.dias_corridos) || 0,
-      dias_liquidez: parseInt(r.dias_liquidez) || 0,
-      aliquota_irrf: sanitisePct(r.aliquota_irrf),
+      id:                    buildId(r, idx),
+      data_base,
+      mes_label,
+      empresa:               (r['empresa']     || '').trim(),
+      no_operacao:           (r['no_operacao']  || '').trim(),
+      banco:                 (r['banco']        || '').trim(),
+      emissor:               (r['emissor']      || '').trim(),
+      produto:               (r['produto']      || '').trim(),
+      rating:                (r['Rating']       || r['rating'] || '').trim(), // CSV usa 'Rating' (maiúsculo)
+      indexador:             (r['indexador']    || '').trim(),
+      tipo_garantia,
+      taxa_cdi_contratada,   // 0..1 (ex 0.96 para 96%)
+      taxa_cdi_mensal,       // 0..1 (ex 0.0097 para 0,97%)
+      data_inicial,
+      data_vencimento,
+      data_carencia,
+      aplicacao_inicial:     sanitiseMoney(r['aplicacao_inicial']),
+      saldo_mes_anterior:    sanitiseMoney(r['saldo_mes_anterior']),
+      aplicacoes_no_mes:     sanitiseMoney(r['aplicacoes_no_mes']),
+      resgates_liquido:      sanitiseMoney(r['resgates_liquido']),
+      iof_mes:               sanitiseMoney(r['iof_mes']),
+      irrf_mes:              sanitiseMoney(r['irrf_mes']),
+      rendimentos:           sanitiseMoney(r['rendimentos']),       // R$ gerado no mês
+      rentabilidade_mensal,  // alias (mesmo campo)
+      saldo_bruto_atual,
+      irrf_final_previsto:   sanitiseMoney(r['irrf_final_previsto']),
+      saldo_liquido_atual,
+      // Derivados
+      dias_carencia_restante,
+      classificacao_liquidez,
+      dias_para_irrf_menor,
     };
   });
 
@@ -152,10 +218,10 @@ function rebuildIndices(overrideLatestRows) {
   }
 
   // KPI simples
-  const saldoBruto = state.latestRows.reduce((sum, r) => sum + r.saldo_liquido_atual, 0);
-  const bloqueado = state.latestRows.filter(r => r.garantia !== 'Livre').reduce((sum, r) => sum + r.saldo_liquido_atual, 0);
-  const liquidezD0 = state.latestRows.filter(r => !r.data_vencimento || (r.data_vencimento && (r.data_vencimento - new Date()) / (1000 * 60 * 60 * 24) <= 0)).reduce((sum, r) => sum + r.saldo_liquido_atual, 0);
-  const rentPonderada = state.latestRows.filter(r => r.garantia === 'Livre').reduce((num, r) => num + r.saldo_liquido_atual * r.cdi_contratado, 0) / (state.latestRows.filter(r => r.garantia === 'Livre').reduce((s, r) => s + r.saldo_liquido_atual, 0) || 1);
+  const saldoBruto = state.latestRows.reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
+  const bloqueado = state.latestRows.filter(r => r.tipo_garantia !== 'Livre').reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
+  const liquidezD0 = state.latestRows.filter(r => !r.data_vencimento || (r.data_vencimento && (r.data_vencimento - new Date()) / (1000 * 60 * 60 * 24) <= 0)).reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
+  const rentPonderada = state.latestRows.filter(r => r.tipo_garantia === 'Livre').reduce((num, r) => num + r.saldo_bruto_atual * r.taxa_cdi_contratada, 0) / (state.latestRows.filter(r => r.tipo_garantia === 'Livre').reduce((s, r) => s + r.saldo_bruto_atual, 0) || 1);
 
   state.kpi = {
     saldoBruto,
@@ -176,39 +242,39 @@ function rebuildIndices(overrideLatestRows) {
   state.latestRows.forEach(r => {
     const diff = r.data_vencimento ? Math.floor((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24)) : 0;
     if (!r.data_vencimento || diff <= 0) {
-      buckets['Vencido/D+0'] += r.saldo_liquido_atual;
+      buckets['Vencido/D+0'] += r.saldo_bruto_atual;
     } else if (diff <= 30) {
-      buckets['1‑30'] += r.saldo_liquido_atual;
+      buckets['1‑30'] += r.saldo_bruto_atual;
     } else if (diff <= 90) {
-      buckets['31‑90'] += r.saldo_liquido_atual;
+      buckets['31‑90'] += r.saldo_bruto_atual;
     } else if (diff <= 180) {
-      buckets['91‑180'] += r.saldo_liquido_atual;
+      buckets['91‑180'] += r.saldo_bruto_atual;
     } else {
-      buckets['>180'] += r.saldo_liquido_atual;
+      buckets['>180'] += r.saldo_bruto_atual;
     }
   });
   state.agingBuckets = buckets;
 
-  // Agrupamento por contraparte e produto
-  const byContraparte = {};
+  // Agrupamento por emissor e produto
+  const byEmissor = {};
   const byProduto = {};
   state.latestRows.forEach(r => {
-    if (!byContraparte[r.contraparte]) byContraparte[r.contraparte] = 0;
-    byContraparte[r.contraparte] += r.saldo_liquido_atual;
+    if (!byEmissor[r.emissor]) byEmissor[r.emissor] = 0;
+    byEmissor[r.emissor] += r.saldo_bruto_atual;
     if (!byProduto[r.produto]) byProduto[r.produto] = 0;
-    byProduto[r.produto] += r.saldo_liquido_atual;
+    byProduto[r.produto] += r.saldo_bruto_atual;
   });
-  state.byContraparte = byContraparte;
+  state.byEmissor = byEmissor;
   state.byProduto = byProduto;
 
   // LTM series (acumulado mês a mês)
   const byMes = {};
   rows.forEach(r => {
-    if (!r.mes) return;
-    if (!byMes[r.mes]) byMes[r.mes] = { somaRent: 0, somaSaldo: 0, cdiMes: [] };
-    byMes[r.mes].somaRent += r.rendimento_bruto;
-    byMes[r.mes].somaSaldo += r.saldo_liquido_atual;
-    if (r.cdi_mes) byMes[r.mes].cdiMes.push(r.cdi_mes);
+    if (!r.mes_label) return;
+    if (!byMes[r.mes_label]) byMes[r.mes_label] = { somaRent: 0, somaSaldo: 0, cdiMes: [] };
+    byMes[r.mes_label].somaRent += r.rentabilidade_mensal;
+    byMes[r.mes_label].somaSaldo += r.saldo_bruto_atual;
+    if (r.taxa_cdi_mensal) byMes[r.mes_label].cdiMes.push(r.taxa_cdi_mensal);
   });
   const series = [];
   Object.keys(byMes).sort().forEach(mes => {
@@ -244,7 +310,7 @@ function renderApp() {
   $('#app').classList.remove('hidden');
   renderKPIs();
   renderAgingChart();
-  renderDonut('donut-contraparte-canvas', '#donut-contraparte', state.byContraparte, 'Contraparte');
+  renderDonut('donut-contraparte-canvas', '#donut-contraparte', state.byEmissor, 'Emissor');
   renderDonut('donut-produto-canvas', '#donut-produto', state.byProduto, 'Produto');
   renderMaturityAlerts();
   renderLTMChart();
@@ -356,7 +422,7 @@ function renderDonut(canvasId, containerId, dataMap, filterKey) {
         if (!elements.length) return;
         const idx = elements[0].index;
         const selected = labels[idx];
-        if (filterKey === 'Contraparte') {
+        if (filterKey === 'Emissor') {
           state.filtroEmissora = selected;
         } else if (filterKey === 'Produto') {
           state.filtroProduto = selected;
@@ -421,7 +487,7 @@ function renderFilterBanner() {
   const hasFilter = (state.filtroEmissora && state.filtroEmissora !== 'Todas') || (state.filtroProduto && state.filtroProduto !== 'Todos');
   if (hasFilter) {
     const parts = [];
-    if (state.filtroEmissora !== 'Todas') parts.push(`Contraparte: ${state.filtroEmissora}`);
+    if (state.filtroEmissora !== 'Todas') parts.push(`Emissor: ${state.filtroEmissora}`);
     if (state.filtroProduto !== 'Todos') parts.push(`Produto: ${state.filtroProduto}`);
     text.textContent = 'Filtro ativo — ' + parts.join(' · ');
     banner.classList.remove('hidden');
@@ -435,8 +501,8 @@ function renderFilterBanner() {
 function renderTable() {
   const headerRow = $('#table-header');
   const body = $('#table-body');
-  const columns = ['no_operacao', 'empresa', 'contraparte', 'produto', 'garantia', 'saldo_liquido_atual', 'cdi_contratado', 'perf_vs_benchmark', 'data_vencimento', 'alerta_benchmark'];
-  const colLabels = { no_operacao: 'Operação', empresa: 'Empresa', contraparte: 'Contraparte', produto: 'Produto', garantia: 'Garantia', saldo_liquido_atual: 'Saldo Líquido', cdi_contratado: 'CDI Contr.', perf_vs_benchmark: 'Perf. vs CDI', data_vencimento: 'Vencimento', alerta_benchmark: 'Status' };
+  const columns = ['no_operacao', 'empresa', 'emissor', 'produto', 'tipo_garantia', 'saldo_bruto_atual', 'taxa_cdi_contratada', 'data_vencimento'];
+  const colLabels = { no_operacao: 'Operação', empresa: 'Empresa', emissor: 'Emissor', produto: 'Produto', tipo_garantia: 'Garantia', saldo_bruto_atual: 'Saldo Bruto', taxa_cdi_contratada: 'CDI Contr.', data_vencimento: 'Vencimento' };
   headerRow.innerHTML = '';
   columns.forEach(col => {
     const th = document.createElement('th');
@@ -486,9 +552,9 @@ function applyFiltersAndRender() {
   // Calcula latestRows sem filtro para obter a base
   const allLatest = state.allRows.filter(r => r.data_base && r.data_base.getTime() === state.latestDate?.getTime());
   const filtered = allLatest.filter(r => {
-    const matchContraparte = state.filtroEmissora && state.filtroEmissora !== 'Todas' ? r.contraparte === state.filtroEmissora : true;
+    const matchEmissor = state.filtroEmissora && state.filtroEmissora !== 'Todas' ? r.emissor === state.filtroEmissora : true;
     const matchProduto = state.filtroProduto && state.filtroProduto !== 'Todos' ? r.produto === state.filtroProduto : true;
-    return matchContraparte && matchProduto;
+    return matchEmissor && matchProduto;
   });
   state.searchTerm = '';
   $('#search-input').value = '';
