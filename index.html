@@ -69,108 +69,152 @@
   <main id="app" class="hidden w-full max-w-7xl space-y-6">
 
     <!-- Filters (Top bar) -->
-    <section id="filter-bar" class="chart-card flex flex-wrap gap-4 items-end">
-      <div class="flex-1 min-w-[150px]">
-        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Mês Base</label>
-        <select id="filter-mes" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
+    <section id="filter-bar" class="flex flex-wrap items-center gap-4 mb-2">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-semibold text-textMuted uppercase tracking-wider">Data Base:</span>
+        <select id="filter-mes" class="p-1 px-2 rounded border border-border bg-surface2 text-textPrimary text-xs focus:outline-none focus:ring-1 focus:ring-accentBlue">
           <option value="">Mais recente</option>
         </select>
       </div>
-      <div class="flex-1 min-w-[150px]">
-        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Emissor</label>
-        <select id="filter-emissor" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
-          <option value="Todas">Todos</option>
-        </select>
-      </div>
-      <div class="flex-1 min-w-[150px]">
-        <label class="block text-xs font-semibold text-textMuted uppercase tracking-wider mb-1">Produto</label>
-        <select id="filter-produto" class="w-full p-2 rounded-lg border border-border bg-surface2 text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60">
-          <option value="Todos">Todos</option>
-        </select>
-      </div>
-      <div>
-        <button id="clear-filter-btn" class="bg-accentRed/10 text-accentRed hover:bg-accentRed hover:text-white text-sm font-medium py-2 px-4 rounded-lg transition whitespace-nowrap border border-accentRed/20">Limpar Filtros</button>
-      </div>
+      <select id="filter-emissor" class="p-1 px-2 rounded border border-border bg-surface2 text-textPrimary text-xs focus:outline-none focus:ring-1 focus:ring-accentBlue">
+        <option value="Todas">Todos os Emissores</option>
+      </select>
+      <select id="filter-produto" class="p-1 px-2 rounded border border-border bg-surface2 text-textPrimary text-xs focus:outline-none focus:ring-1 focus:ring-accentBlue">
+        <option value="Todos">Todos os Produtos</option>
+      </select>
+      <button id="clear-filter-btn" class="hidden">Limpar</button>
     </section>
 
     <!-- KPI Strip -->
     <section id="kpi-strip" class="grid grid-cols-2 lg:grid-cols-5 gap-4"></section>
 
-    <!-- Charts Row 1: Bar Chart | Bar Chart | Alert Box -->
+    <!-- Charts Row 1: Aging | Alerts | Fluxo -->
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <!-- BarChart 1 (Liquidez) -->
-      <div id="aging-chart" class="chart-card">
-        <h3 class="chart-title">Liquidez ao Longo do Tempo</h3>
-        <div class="chart-wrap"><canvas id="aging-canvas"></canvas></div>
+      <!-- Aging Chart -->
+      <div class="chart-card flex flex-col gap-4">
+        <div class="flex justify-between items-center">
+          <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-accentBlue text-base">📈</span> Liquidez ao Longo do Tempo</h3>
+        </div>
+        <div class="chart-wrap flex-1" style="min-height: 240px;"><canvas id="aging-canvas"></canvas></div>
+        
+        <div class="bg-blue-50/50 border border-blue-100 text-blue-800 text-[10px] p-2 rounded-md flex items-center gap-2 mt-auto">
+          <span class="font-bold text-blue-600">ℹ️</span> 
+          <span id="aging-info-text">79,07M com vencimento >360 dias. 43,82M em LFTs.</span>
+        </div>
       </div>
+
       <!-- BarChart 2 (Fluxo Vencimento) -->
-      <div id="fluxo-chart" class="chart-card">
-        <h3 class="chart-title">Fluxo de Vencimento</h3>
-        <div class="chart-wrap"><canvas id="fluxo-canvas"></canvas></div>
+      <div id="fluxo-chart" class="chart-card flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-blue-500 text-base">📅</span> Fluxo Vencimentos</h3>
+          <span class="text-[9px] text-accentBlue font-medium bg-accentBlue/10 px-2 py-0.5 rounded-full">R$ 18,00M total</span>
+        </div>
+        <div class="chart-wrap flex-1" style="min-height: 240px;"><canvas id="fluxo-canvas"></canvas></div>
       </div>
+
       <!-- Maturity Alerts -->
-      <div id="maturity-alerts" class="chart-card">
-        <h3 class="chart-title">Alertas Vencimentos 60d</h3>
-        <ul id="alerts-list" class="space-y-2 mt-2 max-h-72 overflow-y-auto pr-1"></ul>
+      <div id="maturity-alerts" class="chart-card flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-accentRed text-base">⚠️</span> Alertas Vencimento</h3>
+          <span class="text-[9px] font-bold text-accentRed bg-accentRed/10 px-2 py-0.5 rounded-full">1 urgente</span>
+        </div>
+        <ul id="alerts-list" class="space-y-3 flex-1 overflow-y-auto pr-1" style="max-height: 280px;"></ul>
       </div>
     </section>
 
     <!-- Charts Row 2: 3 Donuts -->
-    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div id="donut-emissor" class="chart-card">
-        <h3 class="chart-title">Exposição por Emissor</h3>
-        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-emissor-canvas"></canvas></div>
+    <section class="chart-card">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div id="donut-emissor">
+          <h3 class="chart-title text-center text-[11px]">Exposição por Contraparte</h3>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-emissor-canvas"></canvas></div>
+        </div>
+        <div id="donut-produto">
+          <h3 class="chart-title text-center text-[11px]">Distribuição por Produto</h3>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-produto-canvas"></canvas></div>
+        </div>
+        <div id="donut-rating">
+          <h3 class="chart-title text-center text-[11px]">Distribuição por Rating</h3>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="donut-rating-canvas"></canvas></div>
+        </div>
       </div>
-      <div id="donut-produto" class="chart-card">
-        <h3 class="chart-title">Distribuição por Produto</h3>
-        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-produto-canvas"></canvas></div>
-      </div>
-      <div id="donut-rating" class="chart-card">
-        <h3 class="chart-title">Distribuição por Rating</h3>
-        <div class="chart-wrap chart-wrap--donut"><canvas id="donut-rating-canvas"></canvas></div>
-      </div>
-    </section>
-
-    <!-- Redemption Simulation (Placeholder) -->
-    <section id="redemption-simulation" class="chart-card hidden">
-      <h3 class="chart-title">Simulador de Resgate</h3>
-      <div id="simulation-content"></div>
     </section>
 
     <!-- LTM Line Chart -->
     <section class="grid grid-cols-1 gap-4">
       <div id="ltm-chart" class="chart-card">
-        <h3 class="chart-title">Rentabilidade vs CDI (LTM)</h3>
-        <div class="chart-wrap"><canvas id="ltm-canvas"></canvas></div>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-accentBlue text-base">📈</span> Rentabilidade do Caixa LTM vs CDI LTM</h3>
+          <span class="text-[10px] text-textMuted">Histórico acumulado - Nov/2023 a Fev/2026</span>
+        </div>
+        <div class="chart-wrap" style="height: 220px;"><canvas id="ltm-canvas"></canvas></div>
       </div>
     </section>
 
-    <!-- Drill-down Table -->
-    <section id="drill-table" class="chart-card overflow-hidden">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-        <h3 class="chart-title mb-0">Detalhamento de Ativos</h3>
-        <div class="flex items-center gap-3">
-          <input type="text" id="search-input" class="p-2 px-3 rounded-lg border border-border bg-surface text-textPrimary text-sm focus:outline-none focus:ring-2 focus:ring-accentBlue/60 transition w-56" placeholder="Buscar..." />
-          <button id="export-csv" class="bg-accentGreen/15 text-accentGreen hover:bg-accentGreen hover:text-white text-sm font-medium py-2 px-4 rounded-lg transition whitespace-nowrap">Exportar CSV</button>
-        </div>
+    <!-- Redemption Simulation -->
+    <section id="redemption-simulation" class="chart-card">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-accentBlue text-base">🖥️</span> Simulação de Resgate de Investimentos</h3>
+        <span class="text-[10px] text-accentBlue font-bold uppercase cursor-pointer hover:underline">Melhor Opção de Resgate</span>
       </div>
-      <div class="overflow-x-auto rounded-lg">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr id="table-header"></tr>
-          </thead>
-          <tbody id="table-body"></tbody>
-        </table>
+      <div class="flex mb-5 rounded-md overflow-hidden border border-border text-xs font-medium">
+        <div class="flex-1 bg-[#1a56db] text-white py-2 text-center">Modo 1 — Valor + Data (sugestão automática)</div>
+        <div class="flex-1 bg-surface text-textMuted py-2 text-center cursor-pointer hover:bg-gray-100">Modo 2 — Escolha manual de CDBs</div>
       </div>
       
-      <!-- Pagination Controls -->
-      <div class="flex flex-col sm:flex-row justify-between items-center mt-4 pt-4 border-t border-border/50 text-sm gap-4">
-        <div class="text-textMuted">
-          Mostrando <span id="page-start" class="font-medium text-textPrimary">0</span> - <span id="page-end" class="font-medium text-textPrimary">0</span> de <span id="page-total" class="font-medium text-textPrimary">0</span>
+      <h4 class="text-[10px] font-semibold text-textMuted uppercase mb-3 tracking-wider">Parâmetros da Simulação</h4>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 max-w-3xl">
+        <div>
+          <label class="block text-[11px] text-textMuted mb-1">Valor necessário (R$)</label>
+          <input type="text" value="5000000" class="w-full p-1.5 border border-border rounded bg-surface2 text-sm focus:outline-none focus:ring-1 focus:ring-accentBlue" />
         </div>
-        <div class="flex gap-2">
-          <button id="btn-prev-page" class="px-3 py-1.5 rounded-md border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Anterior</button>
-          <button id="btn-next-page" class="px-3 py-1.5 rounded-md border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Próxima</button>
+        <div>
+          <label class="block text-[11px] text-textMuted mb-1">Data de resgate</label>
+          <input type="date" value="2026-05-15" class="w-full p-1.5 border border-border rounded bg-surface2 text-sm focus:outline-none focus:ring-1 focus:ring-accentBlue" />
+        </div>
+        <div>
+          <label class="block text-[11px] text-textMuted mb-1">Prioridade de seleção</label>
+          <select class="w-full p-1.5 border border-border rounded bg-surface2 text-sm focus:outline-none focus:ring-1 focus:ring-accentBlue">
+            <option>Maximizar valor líquido</option>
+          </select>
+        </div>
+      </div>
+      <button class="bg-[#1a56db] text-white text-xs font-medium py-2 px-5 rounded hover:bg-blue-700 transition flex items-center gap-2">
+        <span>⚡</span> Gerar Sugestão de Resgate
+      </button>
+    </section>
+
+    <!-- Drill-down Table -->
+    <section class="grid grid-cols-1 gap-4 items-start">
+      <!-- Table -->
+      <div id="drill-table" class="chart-card overflow-hidden">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          <h3 class="chart-title mb-0 flex items-center gap-2"><span class="text-accentBlue text-base">📋</span> Tabela Detalhada de Aplicações</h3>
+          <div class="flex items-center gap-3">
+            <input type="text" id="search-input" class="p-1.5 px-3 rounded border border-border bg-surface text-textPrimary text-[11px] focus:outline-none focus:ring-1 focus:ring-accentBlue transition w-48" placeholder="Buscar..." />
+            <button id="export-csv" class="border border-border bg-surface hover:bg-gray-100 text-accentBlue text-[11px] font-medium py-1.5 px-3 rounded transition flex items-center gap-1">
+              <span>⬇</span> Exportar
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto rounded-lg">
+          <table class="min-w-full text-[11px]">
+            <thead>
+              <tr id="table-header"></tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination Controls -->
+        <div class="flex flex-col sm:flex-row justify-between items-center mt-4 pt-4 border-t border-border/50 text-[11px] gap-4">
+          <div class="text-textMuted">
+            Exibindo <span id="page-total" class="font-medium text-textPrimary">0</span> de <span id="page-total-2" class="font-medium text-textPrimary">0</span> aplicações
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-prev-page" class="px-2 py-1 rounded border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Anterior</button>
+            <button id="btn-next-page" class="px-2 py-1 rounded border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Próxima</button>
+          </div>
         </div>
       </div>
     </section>
