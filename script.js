@@ -80,10 +80,12 @@ const state = {
   byRating:   {},
   ltmSeries:  [],
   // filtros
-  filtroDataBase:  null,   // Date | null → null = mais recente
-  filtroEmissores: [],     // [] = todos
-  filtroProdutos:  [],     // [] = todos
+  filtroMes: '',
+  filtroEmissora: 'Todas',
+  filtroProduto: 'Todos',
   searchTerm: '',
+  currentPage: 1,
+  pageSize: 10,
 };
 
 // -------------------- UI Helpers --------------------
@@ -625,51 +627,108 @@ function renderLTMChart() {
 function renderTable() {
   const headerRow = $('#table-header');
   const body = $('#table-body');
-  const columns = ['no_operacao', 'empresa', 'emissor', 'produto', 'tipo_garantia', 'saldo_bruto_atual', 'taxa_cdi_contratada', 'data_vencimento'];
-  const colLabels = { no_operacao: 'Operação', empresa: 'Empresa', emissor: 'Emissor', produto: 'Produto', tipo_garantia: 'Garantia', saldo_bruto_atual: 'Saldo Bruto', taxa_cdi_contratada: 'CDI Contr.', data_vencimento: 'Vencimento' };
-  headerRow.innerHTML = '';
-  columns.forEach(col => {
-    const th = document.createElement('th');
-    th.textContent = colLabels[col] || col;
-    th.dataset.col = col;
-    th.addEventListener('click', () => sortTableBy(col));
-    headerRow.appendChild(th);
+  
+  headerRow.innerHTML = `
+    <th class="pb-3 px-2 font-medium whitespace-nowrap">Produto</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap">Emissor</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-right">Taxa</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-right">Saldo Bruto</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-right">Saldo Líquido</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-right">Rent. Mês</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap">Vencimento</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-center">Prazo Rest.</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap">Liquidez</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap">Rating</th>
+    <th class="pb-3 px-2 font-medium whitespace-nowrap text-center">Dias p/ IRRF</th>
+  `;
+
+  let visible = state.latestRows.filter(r => {
+    if (!state.searchTerm) return true;
+    const term = state.searchTerm;
+    return (r.emissor?.toLowerCase().includes(term) || r.produto?.toLowerCase().includes(term) || r.banco?.toLowerCase().includes(term));
   });
-  // rows filtered by search
-  let rows = state.latestRows;
-  if (state.searchTerm) {
-    rows = rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(state.searchTerm)));
-  }
+
+  // Sort default by data_vencimento ASC
+  visible.sort((a, b) => {
+    const valA = a.data_vencimento ? a.data_vencimento.getTime() : Infinity;
+    const valB = b.data_vencimento ? b.data_vencimento.getTime() : Infinity;
+    return valA - valB;
+  });
+
+  // Pagination logic
+  const total = visible.length;
+  const start = (state.currentPage - 1) * state.pageSize;
+  const end = Math.min(start + state.pageSize, total);
+  
+  const pageRows = visible.slice(start, end);
+
+  // Update DOM for pagination
+  $('#page-start').textContent = total > 0 ? start + 1 : 0;
+  $('#page-end').textContent = end;
+  $('#page-total').textContent = total;
+  
+  $('#btn-prev-page').disabled = state.currentPage === 1;
+  $('#btn-next-page').disabled = end >= total;
+
   body.innerHTML = '';
-  rows.forEach(r => {
+  if (!pageRows.length) {
+    body.innerHTML = `<tr><td colspan="11" class="py-4 text-center text-textMuted">Nenhuma operação encontrada para os filtros aplicados.</td></tr>`;
+    return;
+  }
+  
+  const hoje = new Date();
+
+  pageRows.forEach(r => {
     const tr = document.createElement('tr');
-    columns.forEach(col => {
-      const td = document.createElement('td');
-      let val = r[col];
-      if (val instanceof Date) val = val.toLocaleDateString('pt-BR');
-      if (typeof val === 'number') {
-        if (col.includes('cdi') || col.includes('perf')) {
-          val = (val * 100).toFixed(2) + '%';
-        } else if (col.includes('saldo') || col.includes('aplicacao')) {
-          val = val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-      }
-      td.textContent = val ?? '';
-      tr.appendChild(td);
-    });
+    tr.className = 'hover:bg-surface2 transition-colors group cursor-default text-sm';
+    
+    // Destaque Condicional
+    let isVencimentoProximo = false;
+    let isResgatavel = false;
+    
+    const diasVenc = r.data_vencimento ? Math.ceil((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24)) : Infinity;
+    
+    if (diasVenc < 15) isVencimentoProximo = true;
+    if (r.dias_carencia_restante <= 0 && r.tipo_garantia === 'Livre') isResgatavel = true;
+    
+    if (isResgatavel) {
+      tr.classList.add('bg-accentRed/5');
+      tr.classList.remove('hover:bg-surface2');
+      tr.classList.add('hover:bg-accentRed/10');
+    } else if (isVencimentoProximo) {
+      tr.classList.add('bg-accentOrange/5');
+      tr.classList.remove('hover:bg-surface2');
+      tr.classList.add('hover:bg-accentOrange/10');
+    }
+    
+    const isBloqueado = r.tipo_garantia !== 'Livre';
+    const padlock = isBloqueado ? '<span class="text-xs ml-1" title="Bloqueado">🔒</span>' : '';
+    
+    const taxaFmt = (r.taxa_cdi_contratada * 100).toFixed(1) + '%';
+    const brutoFmt = r.saldo_bruto_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const liquidoFmt = (r.saldo_liquido_atual || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    
+    // Rentabilidade Mês
+    const rentPct = r.saldo_bruto_atual ? (r.rentabilidade_mensal / r.saldo_bruto_atual) * 100 : 0;
+    const rentFmt = rentPct.toFixed(3) + '%';
+    
+    const vencFmt = r.data_vencimento ? r.data_vencimento.toLocaleDateString('pt-BR') : '-';
+    
+    tr.innerHTML = `
+      <td class="py-3 px-2 whitespace-nowrap font-medium">${r.produto}</td>
+      <td class="py-3 px-2 whitespace-nowrap">${r.emissor}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-right font-medium">${taxaFmt}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-right font-medium">${brutoFmt}${padlock}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-right">${liquidoFmt}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-right text-accentTeal">${rentFmt}</td>
+      <td class="py-3 px-2 whitespace-nowrap">${vencFmt}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-center">${r.dias_carencia_restante !== null ? r.dias_carencia_restante : '-'}</td>
+      <td class="py-3 px-2 whitespace-nowrap">${r.classificacao_liquidez || '-'}</td>
+      <td class="py-3 px-2 whitespace-nowrap">${r.rating || '-'}</td>
+      <td class="py-3 px-2 whitespace-nowrap text-center">${r.dias_para_irrf_menor !== null ? r.dias_para_irrf_menor : '-'}</td>
+    `;
     body.appendChild(tr);
   });
-}
-
-function sortTableBy(col) {
-  state.latestRows.sort((a, b) => {
-    const av = a[col];
-    const bv = b[col];
-    if (typeof av === 'number' && typeof bv === 'number') return av - bv;
-    if (av instanceof Date && bv instanceof Date) return av - bv;
-    return String(av).localeCompare(String(bv));
-  });
-  renderTable();
 }
 
 function applyFiltersAndRender() {
@@ -685,6 +744,7 @@ function applyFiltersAndRender() {
     return matchEmissor && matchProduto;
   });
   state.searchTerm = '';
+  state.currentPage = 1;
   $('#search-input').value = '';
   rebuildIndices(filtered); // recompute KPIs based on cross-filtered snapshot
   renderApp();
@@ -730,9 +790,22 @@ $('#export-csv').addEventListener('click', () => {
 });
 $('#search-input').addEventListener('input', (e) => {
   state.searchTerm = e.target.value.toLowerCase();
+  state.currentPage = 1;
   renderTable();
 });
 $('#clear-filter-btn').addEventListener('click', clearFilters);
+
+$('#btn-prev-page').addEventListener('click', () => {
+  if (state.currentPage > 1) {
+    state.currentPage--;
+    renderTable();
+  }
+});
+
+$('#btn-next-page').addEventListener('click', () => {
+  state.currentPage++;
+  renderTable();
+});
 
 ['#filter-mes', '#filter-emissor', '#filter-produto'].forEach(id => {
   $(id).addEventListener('change', (e) => {
