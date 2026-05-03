@@ -278,6 +278,24 @@ function rebuildIndices(overrideLatestRows) {
   });
   state.liquidezBuckets = buckets;
 
+  // Vencimento buckets (soma saldo por faixa de vencimento)
+  const vencimentoBuckets = {
+    'Até 30d': 0,
+    '30-180d': 0,
+    '> 180d': 0,
+  };
+  state.latestRows.forEach(r => {
+    const diff = r.data_vencimento ? Math.floor((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24)) : 0;
+    if (!r.data_vencimento || diff <= 30) {
+      vencimentoBuckets['Até 30d'] += r.saldo_bruto_atual;
+    } else if (diff <= 180) {
+      vencimentoBuckets['30-180d'] += r.saldo_bruto_atual;
+    } else {
+      vencimentoBuckets['> 180d'] += r.saldo_bruto_atual;
+    }
+  });
+  state.vencimentoBuckets = vencimentoBuckets;
+
   // Agrupamento por emissor, produto e rating
   const byEmissor = {};
   const byProduto = {};
@@ -454,10 +472,32 @@ function renderFluxoChart() {
   destroyChart('fluxo');
   const ctx = $('#fluxo-canvas');
   if (!ctx) return;
+  const labels = Object.keys(state.vencimentoBuckets);
+  const data = Object.values(state.vencimentoBuckets);
   chartInstances.fluxo = new Chart(ctx, {
     type: 'bar',
-    data: { labels: ['< 30d', '31-90d', '> 90d'], datasets: [{ label: 'Fluxo (Mock)', data: [0, 0, 0], backgroundColor: '#07b3af' }] },
-    options: { responsive: true, maintainAspectRatio: false }
+    data: { 
+      labels, 
+      datasets: [{ 
+        label: 'Saldo (R$)', 
+        data, 
+        backgroundColor: ['#00689e', '#07b3af', '#0ae4d2'],
+        borderRadius: 6,
+        maxBarThickness: 48,
+      }] 
+    },
+    options: { 
+      responsive: true, 
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => 'R$ ' + ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => 'R$ ' + (v / 1e6).toFixed(1) + 'M' } },
+        x: { grid: { display: false } },
+      },
+    }
   });
 }
 
@@ -509,20 +549,48 @@ function renderDonut(canvasId, containerId, dataMap, filterKey) {
 function renderMaturityAlerts() {
   const list = $('#alerts-list');
   list.innerHTML = '';
+  const hoje = new Date();
+  
   const upcoming = state.latestRows
-    .filter(r => r.data_vencimento && (r.data_vencimento - new Date()) / (1000 * 60 * 60 * 24) > 0)
-    .sort((a, b) => a.data_vencimento - b.data_vencimento)
-    .slice(0, 10);
+    .filter(r => {
+      if (!r.data_vencimento) return false;
+      const days = Math.ceil((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24));
+      return days >= 0 && days <= 60;
+    })
+    .sort((a, b) => a.data_vencimento - b.data_vencimento);
+    
   if (!upcoming.length) {
-    list.innerHTML = '<li class="text-textMuted text-sm">Nenhum vencimento próximo.</li>';
+    list.innerHTML = '<li class="text-textMuted text-sm p-2">Nenhum vencimento nos próximos 60 dias.</li>';
     return;
   }
+  
   upcoming.forEach(r => {
-    const days = Math.ceil((r.data_vencimento - new Date()) / (1000 * 60 * 60 * 24));
-    const cls = days <= 30 ? 'alert-pill--red' : days <= 90 ? 'alert-pill--amber' : 'alert-pill--green';
+    const days = Math.ceil((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24));
+    const isCritical = days < 15;
+    const hasIcon = days < 7;
+    
+    const bgClass = isCritical ? 'bg-accentRed/10 border-accentRed/20' : 'bg-surface border-border';
+    const textClass = isCritical ? 'text-accentRed' : 'text-textPrimary';
+    const taxa = (r.taxa_cdi_contratada * 100).toFixed(1) + '%';
+    const saldo = r.saldo_bruto_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    
     const li = document.createElement('li');
-    li.className = `alert-pill ${cls}`;
-    li.innerHTML = `<strong>${days}d</strong> ${r.empresa} · ${r.produto} · ${r.data_vencimento.toLocaleDateString('pt-BR')}`;
+    li.className = `flex flex-col p-3 rounded-lg border ${bgClass} transition-colors text-sm`;
+    
+    li.innerHTML = `
+      <div class="flex justify-between items-start mb-1">
+        <div class="font-semibold ${textClass} flex items-center gap-1">
+          ${hasIcon ? '⚠️ ' : ''}${r.produto} - ${r.banco}
+        </div>
+        <div class="font-bold text-xs ${isCritical ? 'text-accentRed' : 'text-textMuted'}">
+          Vence em ${days} dia${days !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div class="flex justify-between items-center text-xs text-textMuted mt-1">
+        <span>CDI: <span class="font-medium text-textPrimary">${taxa}</span></span>
+        <span class="font-medium text-textPrimary">${saldo}</span>
+      </div>
+    `;
     list.appendChild(li);
   });
 }
