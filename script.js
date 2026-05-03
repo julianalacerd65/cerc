@@ -294,14 +294,14 @@ function destroyChart(key) {
 
 // -------------------- Palette de cores para donuts --------------------
 const PALETTE = [
-  '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
-  '#06b6d4', '#f43f5e', '#84cc16', '#6366f1', '#14b8a6',
-  '#e879f9', '#fb923c', '#22d3ee', '#a3e635', '#c084fc',
+  '#00689e', '#07b3af', '#0ae4d2', '#1a8bb2', '#33a3cc',
+  '#4dcce6', '#004f7a', '#058c8a', '#08b5a6', '#2699bf',
+  '#17709b', '#209dbf', '#36d9cf', '#0b5978', '#118a88',
 ];
 
-// -------------------- Chart.js defaults (dark theme) --------------------
-Chart.defaults.color = '#94a3b8';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+// -------------------- Chart.js defaults (light theme) --------------------
+Chart.defaults.color = '#666666';
+Chart.defaults.borderColor = '#e0e0e0';
 Chart.defaults.font.family = "'Inter', sans-serif";
 Chart.defaults.font.size = 12;
 
@@ -323,7 +323,7 @@ function renderKPIs() {
   container.innerHTML = '';
   const pctBloqueado = state.kpi.saldoBruto ? ((state.kpi.bloqueado / state.kpi.saldoBruto) * 100).toFixed(1) : '0.0';
   const icons = ['💰', '🔒', '⚡', '📈'];
-  const accents = ['bg-blue-500/15', 'bg-red-500/15', 'bg-emerald-500/15', 'bg-purple-500/15'];
+  const accents = ['bg-accentBlue/15', 'bg-accentOrange/15', 'bg-accentTeal/15', 'bg-accentCyan/15'];
   const cards = [
     { label: 'Saldo Bruto Investido', value: state.kpi.saldoBruto, prefix: 'R$ ', suffix: '', extra: '' },
     { label: 'Bloqueado / Regulatório', value: state.kpi.bloqueado, prefix: 'R$ ', suffix: '', extra: `${pctBloqueado}% do total` },
@@ -369,7 +369,7 @@ function renderAgingChart() {
       datasets: [{
         label: 'Saldo (R$)',
         data,
-        backgroundColor: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#f59e0b'],
+        backgroundColor: ['#0ae4d2', '#07b3af', '#00689e', '#004f7a', '#003655'],
         borderRadius: 6,
         borderSkipped: false,
         maxBarThickness: 48,
@@ -465,8 +465,8 @@ function renderLTMChart() {
     data: {
       labels,
       datasets: [
-        { label: 'Rentabilidade', data: rentData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', tension: 0.35, fill: true, pointRadius: 3, pointBackgroundColor: '#10b981' },
-        { label: 'CDI Acumulado', data: cdiData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.06)', tension: 0.35, fill: true, pointRadius: 3, pointBackgroundColor: '#3b82f6' },
+        { label: 'Rentabilidade', data: rentData, borderColor: '#0ae4d2', backgroundColor: 'rgba(10,228,210,0.08)', tension: 0.35, fill: true, pointRadius: 3, pointBackgroundColor: '#0ae4d2' },
+        { label: 'CDI Acumulado', data: cdiData, borderColor: '#00689e', backgroundColor: 'rgba(0,104,158,0.06)', tension: 0.35, fill: true, pointRadius: 3, pointBackgroundColor: '#00689e' },
       ],
     },
     options: {
