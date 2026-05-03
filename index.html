@@ -162,6 +162,17 @@
           <tbody id="table-body"></tbody>
         </table>
       </div>
+      
+      <!-- Pagination Controls -->
+      <div class="flex flex-col sm:flex-row justify-between items-center mt-4 pt-4 border-t border-border/50 text-sm gap-4">
+        <div class="text-textMuted">
+          Mostrando <span id="page-start" class="font-medium text-textPrimary">0</span> - <span id="page-end" class="font-medium text-textPrimary">0</span> de <span id="page-total" class="font-medium text-textPrimary">0</span>
+        </div>
+        <div class="flex gap-2">
+          <button id="btn-prev-page" class="px-3 py-1.5 rounded-md border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Anterior</button>
+          <button id="btn-next-page" class="px-3 py-1.5 rounded-md border border-border bg-surface2 text-textPrimary hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed transition font-medium">Próxima</button>
+        </div>
+      </div>
     </section>
 
   </main>
