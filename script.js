@@ -111,14 +111,19 @@ function loadCsv(url) {
     download: true,
     header: true,
     dynamicTyping: false,
-    skipEmptyLines: true,
+    skipEmptyLines: 'greedy',
     complete: function (results) {
       if (results.errors.length) {
-        alert('Erro ao ler CSV: ' + results.errors[0].message);
-        console.error(results.errors);
-        return;
+        console.warn('Avisos ao ler CSV:', results.errors);
+        // If it's a completely fatal error and no data was parsed, show alert
+        if (!results.data || results.data.length === 0) {
+          alert('Erro ao ler CSV: ' + results.errors[0].message);
+          return;
+        }
       }
-      processRows(results.data);
+      // Filter out rows that are entirely null/empty due to malformed trailing lines
+      const validRows = results.data.filter(r => Object.keys(r).some(k => r[k] !== null && r[k] !== ''));
+      processRows(validRows);
     },
     error: function (err) {
       alert('Falha ao baixar CSV: ' + err.message);
@@ -401,25 +406,43 @@ function renderKPIs() {
   const container = $('#kpi-strip');
   container.innerHTML = '';
   const pctBloqueado = state.kpi.saldoBruto ? ((state.kpi.bloqueado / state.kpi.saldoBruto) * 100).toFixed(1) : '0.0';
-  const icons = ['💰', '🔒', '⚡', '📈', '📊'];
-  const accents = ['bg-accentBlue/15', 'bg-accentOrange/15', 'bg-accentTeal/15', 'bg-accentCyan/15', 'bg-accentBlue/15'];
+  
+  const saldoLiquido = state.kpi.saldoBruto - state.kpi.bloqueado;
+  const pctLiquido = state.kpi.saldoBruto ? ((saldoLiquido / state.kpi.saldoBruto) * 100).toFixed(1) : '0.0';
+  
+  const cdiLTM = state.kpi.spreadLTM + state.kpi.rentLTM;
+  const pctCaixaCdi = cdiLTM ? ((state.kpi.rentLTM / cdiLTM) * 100).toFixed(1) : '0.0';
+
+  const colors = ['#00689e', '#f59e0b', '#10b981', '#e0e0e0', '#e0e0e0'];
+  const valueColors = ['#000000', '#f59e0b', '#10b981', '#000000', '#00689e'];
+
   const cards = [
-    { label: 'Saldo Bruto Investido', value: state.kpi.saldoBruto, prefix: 'R$ ', suffix: '', extra: '' },
-    { label: 'Bloqueado / Regulatório', value: state.kpi.bloqueado, prefix: 'R$ ', suffix: '', extra: `${pctBloqueado}% do total` },
-    { label: 'Liquidez Imediata (D+0)', value: state.kpi.liquidezD0, prefix: 'R$ ', suffix: '', extra: '' },
-    { label: 'Rentabilidade LTM', value: state.kpi.rentLTM * 100, prefix: '', suffix: '%', extra: 'Média 12M – Caixa Livre' },
-    { label: 'Rent vs CDI (Spread)', value: state.kpi.spreadLTM * 100, prefix: state.kpi.spreadLTM > 0 ? '+' : '', suffix: '%', extra: 'Spread vs Benchmark' },
+    { label: 'SALDO BRUTO INVESTIDO', value: state.kpi.saldoBruto, prefix: 'R$ ', suffix: 'M', extra: '14 aplicações ativas - Base Mar/2026', extraIcon: '' },
+    { label: 'BLOQUEADO / REGULATÓRIO', value: state.kpi.bloqueado, prefix: 'R$ ', suffix: 'M', extra: `${pctBloqueado}% do saldo bruto - LFTs Tesouro`, extraIcon: '🔒' },
+    { label: 'SALDO LÍQUIDO TOTAL', value: saldoLiquido, prefix: 'R$ ', suffix: 'M', extra: `${pctLiquido}% do bruto`, extraIcon: '' },
+    { label: 'RENTABILIDADE LTM', value: state.kpi.rentLTM * 100, prefix: '', suffix: '%', extra: '-0,66 p.p. vs mês ant.', extraIcon: '↓' },
+    { label: 'CAIXA VS CDI LTM', value: parseFloat(pctCaixaCdi), prefix: '', suffix: '%', extra: `CDI LTM: ${(cdiLTM * 100).toFixed(2)}%`, extraIcon: '' },
   ];
+
   cards.forEach((c, i) => {
     const div = document.createElement('div');
-    div.className = 'kpi-card glass';
+    div.className = 'kpi-card';
+    div.style.setProperty('--kpi-color', colors[i]);
+    div.style.setProperty('--kpi-value-color', valueColors[i]);
+
+    let extraHtml = c.extra;
+    if (i === 1) extraHtml = `<span>${c.extraIcon}</span> ${c.extra}`;
+    if (i === 2) extraHtml = `<span class="text-green-500 font-bold">${c.extra}</span>`;
+    if (i === 3) extraHtml = `<span class="bg-red-100 text-red-600 px-1 rounded text-[9px] font-bold">${c.extraIcon}</span> ${c.extra}`;
+    if (i === 4) extraHtml = `<span class="text-orange-500 font-bold">${c.extra}</span>`;
+
     div.innerHTML = `
-      <div class="kpi-icon ${accents[i]}">${icons[i]}</div>
       <span class="kpi-label">${c.label}</span>
       <span class="kpi-value counted">${c.prefix}0${c.suffix}</span>
-      ${c.extra ? `<span class="kpi-extra">${c.extra}</span>` : ''}
+      <span class="kpi-extra">${extraHtml}</span>
     `;
     container.appendChild(div);
+
     // count-up animation
     const span = div.querySelector('.kpi-value');
     const target = parseFloat(c.value);
@@ -430,7 +453,13 @@ function renderKPIs() {
       const p = Math.min((ts - start) / duration, 1);
       const ease = 1 - Math.pow(1 - p, 3); // ease-out cubic
       const current = target * ease;
-      span.textContent = c.prefix + (c.suffix === '%' ? current.toFixed(2) : current.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + c.suffix;
+      
+      let val = current;
+      if (c.prefix === 'R$ ') {
+         val = current / 1e6;
+      }
+      
+      span.textContent = c.prefix + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + c.suffix;
       if (p < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -568,29 +597,35 @@ function renderMaturityAlerts() {
   
   upcoming.forEach(r => {
     const days = Math.ceil((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24));
-    const isCritical = days < 15;
-    const hasIcon = days < 7;
     
-    const bgClass = isCritical ? 'bg-accentRed/10 border-accentRed/20' : 'bg-surface border-border';
-    const textClass = isCritical ? 'text-accentRed' : 'text-textPrimary';
+    const isCritical = days < 30; // red
+    const isWarning = days >= 30 && days < 45; // yellow
+    
+    let colorHex = isCritical ? '#ef4444' : (isWarning ? '#f59e0b' : '#10b981');
+    let bgClass = isCritical ? 'bg-white border-red-200' : (isWarning ? 'bg-white border-yellow-200' : 'bg-white border-green-200');
+    
     const taxa = (r.taxa_cdi_contratada * 100).toFixed(1) + '%';
-    const saldo = r.saldo_bruto_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const saldo = 'R$ ' + (r.saldo_bruto_atual / 1e6).toFixed(2).replace('.', ',') + 'M';
     
     const li = document.createElement('li');
-    li.className = `flex flex-col p-3 rounded-lg border ${bgClass} transition-colors text-sm`;
+    li.className = `flex justify-between items-center p-3 rounded-lg border ${bgClass} transition-colors text-sm shadow-sm mb-2 relative`;
+    
+    const vencText = r.data_vencimento ? r.data_vencimento.toLocaleDateString('pt-BR', {day: '2-digit', month: 'short', year: 'numeric'}) : '';
     
     li.innerHTML = `
-      <div class="flex justify-between items-start mb-1">
-        <div class="font-semibold ${textClass} flex items-center gap-1">
-          ${hasIcon ? '⚠️ ' : ''}${r.produto} - ${r.banco}
-        </div>
-        <div class="font-bold text-xs ${isCritical ? 'text-accentRed' : 'text-textMuted'}">
-          Vence em ${days} dia${days !== 1 ? 's' : ''}
+      <div class="flex items-start gap-3">
+        <div class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style="background-color: ${colorHex};"></div>
+        <div>
+          <div class="font-bold text-[11px] text-textPrimary">
+            ${r.produto} ${r.banco} — ${taxa} CDI
+          </div>
+          <div class="font-medium text-[10px] text-textMuted mt-0.5">
+            Vence em ${days} dias - ${vencText}
+          </div>
         </div>
       </div>
-      <div class="flex justify-between items-center text-xs text-textMuted mt-1">
-        <span>CDI: <span class="font-medium text-textPrimary">${taxa}</span></span>
-        <span class="font-medium text-textPrimary">${saldo}</span>
+      <div class="font-bold text-[11px]" style="color: ${colorHex};">
+        ${saldo}
       </div>
     `;
     list.appendChild(li);
@@ -663,9 +698,8 @@ function renderTable() {
   const pageRows = visible.slice(start, end);
 
   // Update DOM for pagination
-  $('#page-start').textContent = total > 0 ? start + 1 : 0;
-  $('#page-end').textContent = end;
   $('#page-total').textContent = total;
+  $('#page-total-2').textContent = total;
   
   $('#btn-prev-page').disabled = state.currentPage === 1;
   $('#btn-next-page').disabled = end >= total;
@@ -715,17 +749,17 @@ function renderTable() {
     const vencFmt = r.data_vencimento ? r.data_vencimento.toLocaleDateString('pt-BR') : '-';
     
     tr.innerHTML = `
-      <td class="py-3 px-2 whitespace-nowrap font-medium">${r.produto}</td>
-      <td class="py-3 px-2 whitespace-nowrap">${r.emissor}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-right font-medium">${taxaFmt}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-right font-medium">${brutoFmt}${padlock}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-right">${liquidoFmt}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-right text-accentTeal">${rentFmt}</td>
-      <td class="py-3 px-2 whitespace-nowrap">${vencFmt}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-center">${r.dias_carencia_restante !== null ? r.dias_carencia_restante : '-'}</td>
-      <td class="py-3 px-2 whitespace-nowrap">${r.classificacao_liquidez || '-'}</td>
-      <td class="py-3 px-2 whitespace-nowrap">${r.rating || '-'}</td>
-      <td class="py-3 px-2 whitespace-nowrap text-center">${r.dias_para_irrf_menor !== null ? r.dias_para_irrf_menor : '-'}</td>
+      <td class="py-2 px-2 whitespace-nowrap font-medium">${r.produto}</td>
+      <td class="py-2 px-2 whitespace-nowrap">${r.emissor}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-right font-medium">${taxaFmt}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-right font-medium">${brutoFmt}${padlock}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-right">${liquidoFmt}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-right text-accentTeal">${rentFmt}</td>
+      <td class="py-2 px-2 whitespace-nowrap">${vencFmt}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-center">${r.dias_carencia_restante !== null ? r.dias_carencia_restante : '-'}</td>
+      <td class="py-2 px-2 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.tipo_garantia === 'Livre' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">${r.classificacao_liquidez || '-'}</span></td>
+      <td class="py-2 px-2 whitespace-nowrap">${r.rating || '-'}</td>
+      <td class="py-2 px-2 whitespace-nowrap text-center">${r.dias_para_irrf_menor !== null ? r.dias_para_irrf_menor : '-'}</td>
     `;
     body.appendChild(tr);
   });
