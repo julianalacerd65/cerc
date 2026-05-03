@@ -237,43 +237,46 @@ function rebuildIndices(overrideLatestRows) {
     state.latestRows = rows.filter(r => r.data_base && r.data_base.getTime() === state.latestDate?.getTime());
   }
 
+  const hoje = new Date();
+
   // KPI simples
   const saldoBruto = state.latestRows.reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
   const bloqueado = state.latestRows.filter(r => r.tipo_garantia !== 'Livre').reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
-  const liquidezD0 = state.latestRows.filter(r => !r.data_vencimento || (r.data_vencimento && (r.data_vencimento - new Date()) / (1000 * 60 * 60 * 24) <= 0)).reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
-  const rentPonderada = state.latestRows.filter(r => r.tipo_garantia === 'Livre').reduce((num, r) => num + r.saldo_bruto_atual * r.taxa_cdi_contratada, 0) / (state.latestRows.filter(r => r.tipo_garantia === 'Livre').reduce((s, r) => s + r.saldo_bruto_atual, 0) || 1);
+  const liquidezD0 = state.latestRows.filter(r => !r.data_carencia || (r.data_carencia && (r.data_carencia - hoje) / (1000 * 60 * 60 * 24) <= 0)).reduce((sum, r) => sum + r.saldo_bruto_atual, 0);
 
   state.kpi = {
     saldoBruto,
     bloqueado,
     liquidezD0,
-    rentPonderada,
+    rentLTM: 0,
+    spreadLTM: 0,
   };
 
-  // Aging buckets (soma saldo por faixa de vencimento — todos os ativos)
+  // Liquidity buckets (soma saldo por carência e garantia)
   const buckets = {
-    'Vencido/D+0': 0,
-    '1‑30': 0,
-    '31‑90': 0,
-    '91‑180': 0,
-    '>180': 0,
+    'Livre Hoje': 0,
+    'Até 30d': 0,
+    '30‑180d': 0,
+    '> 180d': 0,
+    'Bloqueado': 0,
   };
-  const hoje = new Date();
   state.latestRows.forEach(r => {
-    const diff = r.data_vencimento ? Math.floor((r.data_vencimento - hoje) / (1000 * 60 * 60 * 24)) : 0;
-    if (!r.data_vencimento || diff <= 0) {
-      buckets['Vencido/D+0'] += r.saldo_bruto_atual;
-    } else if (diff <= 30) {
-      buckets['1‑30'] += r.saldo_bruto_atual;
-    } else if (diff <= 90) {
-      buckets['31‑90'] += r.saldo_bruto_atual;
-    } else if (diff <= 180) {
-      buckets['91‑180'] += r.saldo_bruto_atual;
+    if (r.tipo_garantia !== 'Livre') {
+      buckets['Bloqueado'] += r.saldo_bruto_atual;
     } else {
-      buckets['>180'] += r.saldo_bruto_atual;
+      const diff = r.data_carencia ? Math.floor((r.data_carencia - hoje) / (1000 * 60 * 60 * 24)) : 0;
+      if (!r.data_carencia || diff <= 0) {
+        buckets['Livre Hoje'] += r.saldo_bruto_atual;
+      } else if (diff <= 30) {
+        buckets['Até 30d'] += r.saldo_bruto_atual;
+      } else if (diff <= 180) {
+        buckets['30‑180d'] += r.saldo_bruto_atual;
+      } else {
+        buckets['> 180d'] += r.saldo_bruto_atual;
+      }
     }
   });
-  state.agingBuckets = buckets;
+  state.liquidezBuckets = buckets;
 
   // Agrupamento por emissor, produto e rating
   const byEmissor = {};
@@ -298,19 +301,45 @@ function rebuildIndices(overrideLatestRows) {
   const byMes = {};
   rows.forEach(r => {
     if (!r.mes_label) return;
-    if (!byMes[r.mes_label]) byMes[r.mes_label] = { somaRent: 0, somaSaldo: 0, cdiMes: [] };
-    byMes[r.mes_label].somaRent += r.rentabilidade_mensal;
-    byMes[r.mes_label].somaSaldo += r.saldo_bruto_atual;
-    if (r.taxa_cdi_mensal) byMes[r.mes_label].cdiMes.push(r.taxa_cdi_mensal);
+    if (!byMes[r.mes_label]) byMes[r.mes_label] = { somaRent: 0, somaSaldo: 0, cdiMes: 0 };
+    if (r.tipo_garantia === 'Livre') {
+      byMes[r.mes_label].somaRent += r.rentabilidade_mensal;
+      byMes[r.mes_label].somaSaldo += r.saldo_bruto_atual;
+    }
+    if (r.taxa_cdi_mensal > byMes[r.mes_label].cdiMes) {
+      byMes[r.mes_label].cdiMes = r.taxa_cdi_mensal;
+    }
   });
+
+  const sortedMeses = Object.keys(byMes).sort();
   const series = [];
-  Object.keys(byMes).sort().forEach(mes => {
-    const data = byMes[mes];
-    const rentPct = data.somaSaldo ? data.somaRent / data.somaSaldo : 0;
-    const cdiMedian = data.cdiMes.length ? data.cdiMes.sort()[Math.floor(data.cdiMes.length / 2)] : 0;
-    series.push({ mes, rentPct, cdiMedian });
+  sortedMeses.forEach((mes, index) => {
+    const startIndex = Math.max(0, index - 11);
+    const windowMeses = sortedMeses.slice(startIndex, index + 1);
+    
+    let totalRent = 0;
+    let sumSaldo = 0;
+    let cdiCompound = 1;
+    
+    windowMeses.forEach(m => {
+      totalRent += byMes[m].somaRent;
+      sumSaldo += byMes[m].somaSaldo;
+      cdiCompound *= (1 + byMes[m].cdiMes);
+    });
+    
+    const mediaSaldo = sumSaldo / Math.max(1, windowMeses.length);
+    const rentPct = mediaSaldo ? totalRent / mediaSaldo : 0;
+    const cdiLTM = cdiCompound - 1;
+    
+    series.push({ mes, rentPct, cdiLTM });
   });
   state.ltmSeries = series;
+
+  // Selected mes to fetch LTM for KPIs
+  const targetMes = state.filtroMes || (state.latestDate ? `${state.latestDate.getFullYear()}-${String(state.latestDate.getMonth() + 1).padStart(2, '0')}` : null);
+  const currentLtm = series.find(s => s.mes === targetMes) || series[series.length - 1] || { rentPct: 0, cdiLTM: 0 };
+  state.kpi.rentLTM = currentLtm.rentPct;
+  state.kpi.spreadLTM = currentLtm.rentPct - currentLtm.cdiLTM;
 }
 
 // -------------------- Referências a charts (para destruir antes de recriar) --------------------
@@ -358,8 +387,8 @@ function renderKPIs() {
     { label: 'Saldo Bruto Investido', value: state.kpi.saldoBruto, prefix: 'R$ ', suffix: '', extra: '' },
     { label: 'Bloqueado / Regulatório', value: state.kpi.bloqueado, prefix: 'R$ ', suffix: '', extra: `${pctBloqueado}% do total` },
     { label: 'Liquidez Imediata (D+0)', value: state.kpi.liquidezD0, prefix: 'R$ ', suffix: '', extra: '' },
-    { label: 'Rentabilidade LTM', value: state.kpi.rentPonderada * 100, prefix: '', suffix: '%', extra: 'Média ponderada – Livre' },
-    { label: 'Rent vs CDI (Spread)', value: 0, prefix: '', suffix: '%', extra: 'Spread sobre CDI' },
+    { label: 'Rentabilidade LTM', value: state.kpi.rentLTM * 100, prefix: '', suffix: '%', extra: 'Média 12M – Caixa Livre' },
+    { label: 'Rent vs CDI (Spread)', value: state.kpi.spreadLTM * 100, prefix: state.kpi.spreadLTM > 0 ? '+' : '', suffix: '%', extra: 'Spread vs Benchmark' },
   ];
   cards.forEach((c, i) => {
     const div = document.createElement('div');
@@ -391,8 +420,8 @@ function renderKPIs() {
 function renderAgingChart() {
   destroyChart('aging');
   const ctx = $('#aging-canvas');
-  const labels = Object.keys(state.agingBuckets);
-  const data = Object.values(state.agingBuckets);
+  const labels = Object.keys(state.liquidezBuckets);
+  const data = Object.values(state.liquidezBuckets);
   chartInstances.aging = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -503,7 +532,7 @@ function renderLTMChart() {
   const ctx = $('#ltm-canvas');
   const labels = state.ltmSeries.map(s => s.mes);
   const rentData = state.ltmSeries.map(s => (s.rentPct * 100).toFixed(2));
-  const cdiData = state.ltmSeries.map(s => (s.cdiMedian * 100).toFixed(2));
+  const cdiData = state.ltmSeries.map(s => (s.cdiLTM * 100).toFixed(2));
   chartInstances.ltm = new Chart(ctx, {
     type: 'line',
     data: {
