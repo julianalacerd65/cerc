@@ -195,8 +195,28 @@ function processRows(rawRows) {
     };
   });
 
+  populateFilters();
   rebuildIndices();
   renderApp();
+}
+
+function populateFilters() {
+  const allMeses = [...new Set(state.allRows.map(r => r.mes_label).filter(Boolean))].sort().reverse();
+  const allEmissores = [...new Set(state.allRows.map(r => r.emissor).filter(Boolean))].sort();
+  const allProdutos = [...new Set(state.allRows.map(r => r.produto).filter(Boolean))].sort();
+
+  const mesSelect = $('#filter-mes');
+  const emissorSelect = $('#filter-emissor');
+  const produtoSelect = $('#filter-produto');
+
+  mesSelect.innerHTML = '<option value="">Mais recente</option>';
+  allMeses.forEach(m => mesSelect.add(new Option(m, m)));
+  
+  emissorSelect.innerHTML = '<option value="Todas">Todos</option>';
+  allEmissores.forEach(e => emissorSelect.add(new Option(e, e)));
+  
+  produtoSelect.innerHTML = '<option value="Todos">Todos</option>';
+  allProdutos.forEach(p => produtoSelect.add(new Option(p, p)));
 }
 
 function rebuildIndices(overrideLatestRows) {
@@ -255,17 +275,24 @@ function rebuildIndices(overrideLatestRows) {
   });
   state.agingBuckets = buckets;
 
-  // Agrupamento por emissor e produto
+  // Agrupamento por emissor, produto e rating
   const byEmissor = {};
   const byProduto = {};
+  const byRating = {};
   state.latestRows.forEach(r => {
     if (!byEmissor[r.emissor]) byEmissor[r.emissor] = 0;
     byEmissor[r.emissor] += r.saldo_bruto_atual;
+    
     if (!byProduto[r.produto]) byProduto[r.produto] = 0;
     byProduto[r.produto] += r.saldo_bruto_atual;
+    
+    const rtg = r.rating || 'N/A';
+    if (!byRating[rtg]) byRating[rtg] = 0;
+    byRating[rtg] += r.saldo_bruto_atual;
   });
   state.byEmissor = byEmissor;
   state.byProduto = byProduto;
+  state.byRating = byRating;
 
   // LTM series (acumulado mês a mês)
   const byMes = {};
@@ -310,11 +337,14 @@ function renderApp() {
   $('#app').classList.remove('hidden');
   renderKPIs();
   renderAgingChart();
-  renderDonut('donut-contraparte-canvas', '#donut-contraparte', state.byEmissor, 'Emissor');
+  renderFluxoChart();
+  
+  renderDonut('donut-emissor-canvas', '#donut-emissor', state.byEmissor, 'Emissor');
   renderDonut('donut-produto-canvas', '#donut-produto', state.byProduto, 'Produto');
+  renderDonut('donut-rating-canvas', '#donut-rating', state.byRating, 'Rating');
+  
   renderMaturityAlerts();
   renderLTMChart();
-  renderFilterBanner();
   renderTable();
 }
 
@@ -322,13 +352,14 @@ function renderKPIs() {
   const container = $('#kpi-strip');
   container.innerHTML = '';
   const pctBloqueado = state.kpi.saldoBruto ? ((state.kpi.bloqueado / state.kpi.saldoBruto) * 100).toFixed(1) : '0.0';
-  const icons = ['💰', '🔒', '⚡', '📈'];
-  const accents = ['bg-accentBlue/15', 'bg-accentOrange/15', 'bg-accentTeal/15', 'bg-accentCyan/15'];
+  const icons = ['💰', '🔒', '⚡', '📈', '📊'];
+  const accents = ['bg-accentBlue/15', 'bg-accentOrange/15', 'bg-accentTeal/15', 'bg-accentCyan/15', 'bg-accentBlue/15'];
   const cards = [
     { label: 'Saldo Bruto Investido', value: state.kpi.saldoBruto, prefix: 'R$ ', suffix: '', extra: '' },
     { label: 'Bloqueado / Regulatório', value: state.kpi.bloqueado, prefix: 'R$ ', suffix: '', extra: `${pctBloqueado}% do total` },
     { label: 'Liquidez Imediata (D+0)', value: state.kpi.liquidezD0, prefix: 'R$ ', suffix: '', extra: '' },
     { label: 'Rentabilidade LTM', value: state.kpi.rentPonderada * 100, prefix: '', suffix: '%', extra: 'Média ponderada – Livre' },
+    { label: 'Rent vs CDI (Spread)', value: 0, prefix: '', suffix: '%', extra: 'Spread sobre CDI' },
   ];
   cards.forEach((c, i) => {
     const div = document.createElement('div');
@@ -390,6 +421,17 @@ function renderAgingChart() {
   });
 }
 
+function renderFluxoChart() {
+  destroyChart('fluxo');
+  const ctx = $('#fluxo-canvas');
+  if (!ctx) return;
+  chartInstances.fluxo = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: ['< 30d', '31-90d', '> 90d'], datasets: [{ label: 'Fluxo (Mock)', data: [0, 0, 0], backgroundColor: '#07b3af' }] },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
 function renderDonut(canvasId, containerId, dataMap, filterKey) {
   destroyChart(canvasId);
   const ctx = document.getElementById(canvasId);
@@ -424,8 +466,10 @@ function renderDonut(canvasId, containerId, dataMap, filterKey) {
         const selected = labels[idx];
         if (filterKey === 'Emissor') {
           state.filtroEmissora = selected;
+          $('#filter-emissor').value = selected;
         } else if (filterKey === 'Produto') {
           state.filtroProduto = selected;
+          $('#filter-produto').value = selected;
         }
         applyFiltersAndRender();
       },
@@ -481,23 +525,6 @@ function renderLTMChart() {
   });
 }
 
-function renderFilterBanner() {
-  const banner = $('#filter-banner');
-  const text = $('#filter-text');
-  const hasFilter = (state.filtroEmissora && state.filtroEmissora !== 'Todas') || (state.filtroProduto && state.filtroProduto !== 'Todos');
-  if (hasFilter) {
-    const parts = [];
-    if (state.filtroEmissora !== 'Todas') parts.push(`Emissor: ${state.filtroEmissora}`);
-    if (state.filtroProduto !== 'Todos') parts.push(`Produto: ${state.filtroProduto}`);
-    text.textContent = 'Filtro ativo — ' + parts.join(' · ');
-    banner.classList.remove('hidden');
-    banner.classList.add('flex');
-  } else {
-    banner.classList.add('hidden');
-    banner.classList.remove('flex');
-  }
-}
-
 function renderTable() {
   const headerRow = $('#table-header');
   const body = $('#table-body');
@@ -549,8 +576,12 @@ function sortTableBy(col) {
 }
 
 function applyFiltersAndRender() {
-  // Calcula latestRows sem filtro para obter a base
-  const allLatest = state.allRows.filter(r => r.data_base && r.data_base.getTime() === state.latestDate?.getTime());
+  // Filtra de acordo com mês, emissor, produto
+  // Se filtroMes não estiver setado, pega do mês mais recente
+  const targetMes = state.filtroMes || (state.latestDate ? `${state.latestDate.getFullYear()}-${String(state.latestDate.getMonth() + 1).padStart(2, '0')}` : null);
+  
+  const allLatest = targetMes ? state.allRows.filter(r => r.mes_label === targetMes) : state.allRows;
+  
   const filtered = allLatest.filter(r => {
     const matchEmissor = state.filtroEmissora && state.filtroEmissora !== 'Todas' ? r.emissor === state.filtroEmissora : true;
     const matchProduto = state.filtroProduto && state.filtroProduto !== 'Todos' ? r.produto === state.filtroProduto : true;
@@ -563,12 +594,15 @@ function applyFiltersAndRender() {
 }
 
 function clearFilters() {
+  state.filtroMes = '';
   state.filtroEmissora = 'Todas';
   state.filtroProduto = 'Todos';
   state.searchTerm = '';
+  $('#filter-mes').value = '';
+  $('#filter-emissor').value = 'Todas';
+  $('#filter-produto').value = 'Todos';
   $('#search-input').value = '';
-  rebuildIndices();
-  renderApp();
+  applyFiltersAndRender();
 }
 
 // -------------------- Eventos UI --------------------
@@ -601,7 +635,16 @@ $('#search-input').addEventListener('input', (e) => {
   state.searchTerm = e.target.value.toLowerCase();
   renderTable();
 });
-$('#clear-filter').addEventListener('click', clearFilters);
+$('#clear-filter-btn').addEventListener('click', clearFilters);
+
+['#filter-mes', '#filter-emissor', '#filter-produto'].forEach(id => {
+  $(id).addEventListener('change', (e) => {
+    if (id === '#filter-mes') state.filtroMes = e.target.value;
+    if (id === '#filter-emissor') state.filtroEmissora = e.target.value;
+    if (id === '#filter-produto') state.filtroProduto = e.target.value;
+    applyFiltersAndRender();
+  });
+});
 
 // -------------------- Inicialização --------------------
 window.addEventListener('load', () => {
